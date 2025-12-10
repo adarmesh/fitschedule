@@ -119,13 +119,13 @@ export default function CalendarScreen() {
         onDateChange={setCurrentDate}
       />
 
-      {/* Day headers */}
+      {/* Day headers - centered across full screen width */}
       <View style={styles.dayHeaders}>
-        <View style={{ width: TIME_COLUMN_WIDTH }} />
         {days.map((day, i) => {
           const isToday = day.toDateString() === new Date().toDateString();
+          const headerWidth = SCREEN_WIDTH / days.length;
           return (
-            <View key={i} style={[styles.dayHeader, { width: dayWidth }]}>
+            <View key={i} style={[styles.dayHeader, { width: headerWidth }]}>
               <Text style={[styles.dayName, isToday && styles.todayText]}>
                 {day.toLocaleDateString('en', { weekday: 'short' })}
               </Text>
