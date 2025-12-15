@@ -1,7 +1,7 @@
 import { useApp } from '@/context/AppContext';
 import { Ionicons } from '@expo/vector-icons';
-import React, { useState } from 'react';
-import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { Animated, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import MonthPicker from './MonthPicker';
 
 interface TopBarProps {
@@ -13,6 +13,8 @@ interface TopBarProps {
 export default function TopBar({ onMenuPress, currentDate, onDateChange }: TopBarProps) {
     const { data } = useApp();
     const [showMonthPicker, setShowMonthPicker] = useState(false);
+    const [isPickerMounted, setIsPickerMounted] = useState(false);
+    const slideAnim = useRef(new Animated.Value(0)).current;
 
     const monthNames = [
         'January', 'February', 'March', 'April', 'May', 'June',
@@ -20,6 +22,35 @@ export default function TopBar({ onMenuPress, currentDate, onDateChange }: TopBa
     ];
 
     const monthYear = `${monthNames[currentDate.getMonth()]} ${currentDate.getFullYear()}`;
+
+    useEffect(() => {
+        if (showMonthPicker) {
+            setIsPickerMounted(true);
+            Animated.timing(slideAnim, {
+                toValue: 1,
+                duration: 300,
+                useNativeDriver: true,
+            }).start();
+        } else {
+            Animated.timing(slideAnim, {
+                toValue: 0,
+                duration: 300,
+                useNativeDriver: true,
+            }).start(() => {
+                setIsPickerMounted(false);
+            });
+        }
+    }, [showMonthPicker, slideAnim]);
+
+    const pickerTranslateY = slideAnim.interpolate({
+        inputRange: [0, 1],
+        outputRange: [-350, 0],
+    });
+
+    const pickerOpacity = slideAnim.interpolate({
+        inputRange: [0, 1],
+        outputRange: [0, 1],
+    });
 
     return (
         <View style={styles.container}>
@@ -51,15 +82,27 @@ export default function TopBar({ onMenuPress, currentDate, onDateChange }: TopBa
                 )}
             </TouchableOpacity>
 
-            {showMonthPicker && (
-                <MonthPicker
-                    currentDate={currentDate}
-                    onDateSelect={(date) => {
-                        onDateChange(date);
-                        setShowMonthPicker(false);
-                    }}
-                    onClose={() => setShowMonthPicker(false)}
-                />
+            {isPickerMounted && (
+                <View style={styles.pickerContainer}>
+                    <Animated.View
+                        style={[
+                            styles.pickerAnimatedWrapper,
+                            {
+                                transform: [{ translateY: pickerTranslateY }],
+                                opacity: pickerOpacity,
+                            },
+                        ]}
+                    >
+                        <MonthPicker
+                            currentDate={currentDate}
+                            onDateSelect={(date) => {
+                                onDateChange(date);
+                                setShowMonthPicker(false);
+                            }}
+                            onClose={() => setShowMonthPicker(false)}
+                        />
+                    </Animated.View>
+                </View>
             )}
         </View>
     );
@@ -113,5 +156,16 @@ const styles = StyleSheet.create({
         color: '#fff',
         fontSize: 16,
         fontWeight: '600',
+    },
+    pickerContainer: {
+        position: 'absolute',
+        top: 64,
+        left: 0,
+        right: 0,
+        overflow: 'hidden',
+        zIndex: 100,
+    },
+    pickerAnimatedWrapper: {
+        width: '100%',
     },
 });

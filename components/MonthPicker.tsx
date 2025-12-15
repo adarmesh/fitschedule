@@ -93,14 +93,10 @@ export default function MonthPicker({ currentDate, onDateSelect, onClose }: Mont
 
 const styles = StyleSheet.create({
     container: {
-        position: 'absolute',
-        top: 56,
-        left: 16,
-        right: 16,
+        marginHorizontal: 16,
         backgroundColor: '#1a1a1a',
         borderRadius: 16,
         padding: 16,
-        zIndex: 200,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.3,
