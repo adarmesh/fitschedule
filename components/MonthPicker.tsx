@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 interface MonthPickerProps {
@@ -9,58 +9,94 @@ interface MonthPickerProps {
 }
 
 export default function MonthPicker({ currentDate, onDateSelect, onClose }: MonthPickerProps) {
-    const year = currentDate.getFullYear();
-    const month = currentDate.getMonth();
+    const [viewedMonth, setViewedMonth] = useState(currentDate.getMonth());
+    const [viewedYear, setViewedYear] = useState(currentDate.getFullYear());
+
+    // Sync viewed month/year when currentDate changes from outside
+    useEffect(() => {
+        setViewedMonth(currentDate.getMonth());
+        setViewedYear(currentDate.getFullYear());
+    }, [currentDate]);
 
     const getDaysInMonth = (y: number, m: number) => new Date(y, m + 1, 0).getDate();
     const getFirstDayOfMonth = (y: number, m: number) => new Date(y, m, 1).getDay();
 
-    const daysInMonth = getDaysInMonth(year, month);
-    const firstDay = getFirstDayOfMonth(year, month);
+    const daysInMonth = getDaysInMonth(viewedYear, viewedMonth);
+    const firstDay = getFirstDayOfMonth(viewedYear, viewedMonth);
     const today = new Date();
 
     const changeMonth = (delta: number) => {
-        const newDate = new Date(year, month + delta, 1);
-        onDateSelect(newDate);
+        let newMonth = viewedMonth + delta;
+        let newYear = viewedYear;
+
+        if (newMonth > 11) {
+            newMonth = 0;
+            newYear += 1;
+        } else if (newMonth < 0) {
+            newMonth = 11;
+            newYear -= 1;
+        }
+
+        setViewedMonth(newMonth);
+        setViewedYear(newYear);
     };
 
-    const weeks = [];
-    let days = [];
+    const isSelectedDateVisible =
+        currentDate.getMonth() === viewedMonth &&
+        currentDate.getFullYear() === viewedYear;
 
-    // Empty cells for days before first of month
-    for (let i = 0; i < firstDay; i++) {
-        days.push(<View key={`empty-${i}`} style={styles.dayCell} />);
-    }
+    // Build calendar grid data using useMemo for stability
+    const calendarGrid = React.useMemo(() => {
+        const gridData = [];
+        const totalCells = 42; // 6 weeks * 7 days
 
-    for (let day = 1; day <= daysInMonth; day++) {
+        for (let weekIndex = 0; weekIndex < 6; weekIndex++) {
+            const weekDays = [];
+            for (let dayIndex = 0; dayIndex < 7; dayIndex++) {
+                const cellIndex = weekIndex * 7 + dayIndex;
+                const dayNumber = cellIndex - firstDay + 1;
+                const isValidDay = dayNumber >= 1 && dayNumber <= daysInMonth;
+
+                weekDays.push({
+                    cellIndex,
+                    dayNumber: isValidDay ? dayNumber : null,
+                    isValidDay,
+                });
+            }
+            gridData.push(weekDays);
+        }
+        return gridData;
+    }, [viewedMonth, viewedYear, firstDay, daysInMonth]);
+
+    const renderDay = (day: { cellIndex: number; dayNumber: number | null; isValidDay: boolean }) => {
+        if (!day.isValidDay || day.dayNumber === null) {
+            return <View key={`empty-${day.cellIndex}`} style={styles.dayCell} />;
+        }
+
         const isToday =
-            day === today.getDate() &&
-            month === today.getMonth() &&
-            year === today.getFullYear();
+            day.dayNumber === today.getDate() &&
+            viewedMonth === today.getMonth() &&
+            viewedYear === today.getFullYear();
 
-        const isSelected = day === currentDate.getDate();
+        const isSelected = isSelectedDateVisible && day.dayNumber === currentDate.getDate();
 
-        days.push(
+        return (
             <TouchableOpacity
-                key={day}
+                key={`day-${day.dayNumber}`}
                 style={[styles.dayCell, isSelected && styles.selectedDay]}
-                onPress={() => onDateSelect(new Date(year, month, day))}
+                onPress={() => onDateSelect(new Date(viewedYear, viewedMonth, day.dayNumber!))}
             >
                 <Text style={[styles.dayText, isToday && styles.todayText, isSelected && styles.selectedDayText]}>
-                    {day}
+                    {day.dayNumber}
                 </Text>
             </TouchableOpacity>
         );
+    };
 
-        if ((firstDay + day) % 7 === 0 || day === daysInMonth) {
-            weeks.push(
-                <View key={`week-${weeks.length}`} style={styles.weekRow}>
-                    {days}
-                </View>
-            );
-            days = [];
-        }
-    }
+    const monthNames = [
+        'January', 'February', 'March', 'April', 'May', 'June',
+        'July', 'August', 'September', 'October', 'November', 'December'
+    ];
 
     return (
         <View style={styles.container}>
@@ -69,7 +105,7 @@ export default function MonthPicker({ currentDate, onDateSelect, onClose }: Mont
                     <Ionicons name="chevron-back" size={24} color="#fff" />
                 </TouchableOpacity>
                 <Text style={styles.headerText}>
-                    {currentDate.toLocaleString('default', { month: 'long', year: 'numeric' })}
+                    {monthNames[viewedMonth]} {viewedYear}
                 </Text>
                 <TouchableOpacity onPress={() => changeMonth(1)}>
                     <Ionicons name="chevron-forward" size={24} color="#fff" />
@@ -82,7 +118,11 @@ export default function MonthPicker({ currentDate, onDateSelect, onClose }: Mont
                 ))}
             </View>
 
-            {weeks}
+            {calendarGrid.map((week, weekIndex) => (
+                <View key={`week-${weekIndex}`} style={styles.weekRow}>
+                    {week.map(renderDay)}
+                </View>
+            ))}
 
             <TouchableOpacity style={styles.todayButton} onPress={() => onDateSelect(new Date())}>
                 <Text style={styles.todayButtonText}>Today</Text>
@@ -129,8 +169,8 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
     },
     dayCell: {
-        flex: 1,
-        aspectRatio: 1,
+        width: '14.28%',
+        height: 40,
         justifyContent: 'center',
         alignItems: 'center',
         borderRadius: 20,
