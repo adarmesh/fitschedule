@@ -1,17 +1,16 @@
-import { useApp } from '@/context/AppContext';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import MonthPicker from './MonthPicker';
 
 interface TopBarProps {
     onMenuPress: () => void;
+    onPlusPress: () => void;
     currentDate: Date;
     onDateChange: (date: Date) => void;
 }
 
-export default function TopBar({ onMenuPress, currentDate, onDateChange }: TopBarProps) {
-    const { data } = useApp();
+export default function TopBar({ onMenuPress, onPlusPress, currentDate, onDateChange }: TopBarProps) {
     const [showMonthPicker, setShowMonthPicker] = useState(false);
     const [isPickerMounted, setIsPickerMounted] = useState(false);
     const slideAnim = useRef(new Animated.Value(0)).current;
@@ -70,16 +69,8 @@ export default function TopBar({ onMenuPress, currentDate, onDateChange }: TopBa
                 />
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.avatarContainer}>
-                {data.profile.avatarUri ? (
-                    <Image source={{ uri: data.profile.avatarUri }} style={styles.avatar} />
-                ) : (
-                    <View style={styles.avatarPlaceholder}>
-                        <Text style={styles.avatarInitial}>
-                            {data.profile.name?.charAt(0).toUpperCase() || '?'}
-                        </Text>
-                    </View>
-                )}
+            <TouchableOpacity style={styles.plusButton} onPress={onPlusPress}>
+                <Ionicons name="add" size={24} color="#fff" />
             </TouchableOpacity>
 
             {isPickerMounted && (
@@ -135,27 +126,11 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         color: '#fff',
     },
-    avatarContainer: {
+    plusButton: {
         width: 40,
         height: 40,
-    },
-    avatar: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-    },
-    avatarPlaceholder: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: '#4f46e5',
         justifyContent: 'center',
         alignItems: 'center',
-    },
-    avatarInitial: {
-        color: '#fff',
-        fontSize: 16,
-        fontWeight: '600',
     },
     pickerContainer: {
         position: 'absolute',

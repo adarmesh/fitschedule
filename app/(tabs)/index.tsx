@@ -98,12 +98,6 @@ export default function CalendarScreen() {
     return now.getHours() * HOUR_HEIGHT + (now.getMinutes() / 60) * HOUR_HEIGHT;
   }
 
-  function handleTimeSlotPress(date: Date, hour: number, minute: number) {
-    const dateStr = date.toISOString().split('T')[0];
-    const timeStr = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
-    setSelectedTime({ date: dateStr, time: timeStr });
-  }
-
   function getEventsForDay(date: Date): Event[] {
     const dateStr = date.toISOString().split('T')[0];
     return data.events.filter((e) => e.date === dateStr);
@@ -115,6 +109,12 @@ export default function CalendarScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <TopBar
         onMenuPress={() => setSidebarOpen(true)}
+        onPlusPress={() => {
+          const now = new Date();
+          const dateStr = now.toISOString().split('T')[0];
+          const timeStr = `${now.getHours().toString().padStart(2, '0')}:${Math.floor(now.getMinutes() / 30) * 30 === 0 ? '00' : '30'}`;
+          setSelectedTime({ date: dateStr, time: timeStr });
+        }}
         currentDate={currentDate}
         onDateChange={setCurrentDate}
       />
@@ -165,10 +165,9 @@ export default function CalendarScreen() {
                   const hour = Math.floor(slotIndex / 2);
                   const minute = (slotIndex % 2) * 30;
                   return (
-                    <TouchableOpacity
+                    <View
                       key={slotIndex}
                       style={styles.slot}
-                      onPress={() => handleTimeSlotPress(day, hour, minute)}
                     />
                   );
                 })}
