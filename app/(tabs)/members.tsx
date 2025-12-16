@@ -182,12 +182,9 @@ export default function MembersScreen() {
                                 <View style={styles.modalActions}>
                                     <TouchableOpacity
                                         style={styles.cancelBtn}
-                                        onPress={() => {
-                                            setAddMode(null);
-                                            setShowAddModal(false);
-                                        }}
+                                        onPress={() => setAddMode(null)}
                                     >
-                                        <Text style={styles.cancelText}>Cancel</Text>
+                                        <Text style={styles.cancelText}>Back</Text>
                                     </TouchableOpacity>
                                     <TouchableOpacity style={styles.saveBtn} onPress={handleSave}>
                                         <Text style={styles.saveText}>Save</Text>
@@ -222,10 +219,8 @@ const styles = StyleSheet.create({
         color: '#fff',
     },
     addButton: {
-        width: 44,
-        height: 44,
-        backgroundColor: '#4f46e5',
-        borderRadius: 22,
+        width: 40,
+        height: 40,
         justifyContent: 'center',
         alignItems: 'center',
     },
