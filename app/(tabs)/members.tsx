@@ -6,7 +6,6 @@ import React, { useState } from 'react';
 import {
     Alert,
     FlatList,
-    Linking,
     StyleSheet,
     Text,
     TextInput,
@@ -16,12 +15,13 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function MembersScreen() {
-    const { data, addMember, deleteMember } = useApp();
+    const { data, addMember, updateMember, deleteMember } = useApp();
     const [showAddModal, setShowAddModal] = useState(false);
     const [addMode, setAddMode] = useState<'manual' | 'contacts' | null>(null);
     const [name, setName] = useState('');
     const [whatsapp, setWhatsapp] = useState('');
-    const [sessions, setSessions] = useState('');
+    const [showEditModal, setShowEditModal] = useState(false);
+    const [editingMember, setEditingMember] = useState<Member | null>(null);
 
     const handleAddFromContacts = async () => {
         const { status } = await Contacts.requestPermissionsAsync();
@@ -52,53 +52,72 @@ export default function MembersScreen() {
         addMember({
             name: name.trim(),
             whatsapp: whatsapp.trim(),
-            sessionsTotal: parseInt(sessions) || 0,
-            sessionsRemaining: parseInt(sessions) || 0,
         });
 
         setName('');
         setWhatsapp('');
-        setSessions('');
         setShowAddModal(false);
         setAddMode(null);
     };
 
-    const openWhatsApp = (phone: string) => {
-        const url = `whatsapp://send?phone=${phone.replace(/\D/g, '')}`;
-        Linking.openURL(url).catch(() => {
-            Alert.alert('Error', 'Could not open WhatsApp');
+    const handleEdit = (member: Member) => {
+        setEditingMember(member);
+        setName(member.name);
+        setWhatsapp(member.whatsapp);
+        setShowEditModal(true);
+    };
+
+    const handleEditSave = () => {
+        if (!editingMember) return;
+        
+        if (!name.trim()) {
+            Alert.alert('Error', 'Name is required');
+            return;
+        }
+
+        updateMember(editingMember.id, {
+            name: name.trim(),
+            whatsapp: whatsapp.trim(),
         });
+
+        setName('');
+        setWhatsapp('');
+        setEditingMember(null);
+        setShowEditModal(false);
+    };
+
+    const handleDelete = (member: Member) => {
+        Alert.alert(
+            'Delete Contact',
+            `Are you sure you want to remove ${member.name}? This will also delete all their scheduled sessions.`,
+            [
+                { text: 'Cancel' },
+                {
+                    text: 'Delete',
+                    style: 'destructive',
+                    onPress: () => {
+                        deleteMember(member.id);
+                        setName('');
+                        setWhatsapp('');
+                        setEditingMember(null);
+                        setShowEditModal(false);
+                    },
+                },
+            ]
+        );
     };
 
     const renderMember = ({ item }: { item: Member }) => (
         <View style={styles.memberCard}>
             <View style={styles.memberInfo}>
                 <Text style={styles.memberName}>{item.name}</Text>
-                <Text style={styles.memberSessions}>
-                    {item.sessionsRemaining} sessions remaining
-                </Text>
             </View>
-            <View style={styles.memberActions}>
-                {item.whatsapp && (
-                    <TouchableOpacity
-                        style={styles.actionBtn}
-                        onPress={() => openWhatsApp(item.whatsapp)}
-                    >
-                        <Ionicons name="logo-whatsapp" size={20} color="#25D366" />
-                    </TouchableOpacity>
-                )}
-                <TouchableOpacity
-                    style={styles.actionBtn}
-                    onPress={() => {
-                        Alert.alert('Delete Member', `Remove ${item.name}?`, [
-                            { text: 'Cancel' },
-                            { text: 'Delete', style: 'destructive', onPress: () => deleteMember(item.id) },
-                        ]);
-                    }}
-                >
-                    <Ionicons name="trash-outline" size={20} color="#ef4444" />
-                </TouchableOpacity>
-            </View>
+            <TouchableOpacity
+                style={styles.actionBtn}
+                onPress={() => handleEdit(item)}
+            >
+                <Ionicons name="create-outline" size={20} color="#4f46e5" />
+            </TouchableOpacity>
         </View>
     );
 
@@ -171,14 +190,6 @@ export default function MembersScreen() {
                                     onChangeText={setWhatsapp}
                                     keyboardType="phone-pad"
                                 />
-                                <TextInput
-                                    style={styles.input}
-                                    placeholder="Sessions Purchased"
-                                    placeholderTextColor="#666"
-                                    value={sessions}
-                                    onChangeText={setSessions}
-                                    keyboardType="number-pad"
-                                />
                                 <View style={styles.modalActions}>
                                     <TouchableOpacity
                                         style={styles.cancelBtn}
@@ -192,6 +203,43 @@ export default function MembersScreen() {
                                 </View>
                             </>
                         )}
+                    </View>
+                </View>
+            )}
+
+            {showEditModal && editingMember && (
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modal}>
+                        <Text style={styles.modalTitle}>Edit Contact</Text>
+                        <TextInput
+                            style={styles.input}
+                            placeholder="Name"
+                            placeholderTextColor="#666"
+                            value={name}
+                            onChangeText={setName}
+                        />
+                        <TextInput
+                            style={styles.input}
+                            placeholder="WhatsApp (with country code)"
+                            placeholderTextColor="#666"
+                            value={whatsapp}
+                            onChangeText={setWhatsapp}
+                            keyboardType="phone-pad"
+                        />
+                        <View style={styles.modalActions}>
+                            <TouchableOpacity
+                                style={styles.saveBtn}
+                                onPress={handleEditSave}
+                            >
+                                <Text style={styles.saveText}>Save</Text>
+                            </TouchableOpacity>
+                        </View>
+                        <TouchableOpacity
+                            style={styles.deleteContactBtn}
+                            onPress={() => handleDelete(editingMember)}
+                        >
+                            <Text style={styles.deleteContactText}>Delete Contact</Text>
+                        </TouchableOpacity>
                     </View>
                 </View>
             )}
@@ -242,11 +290,6 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: '600',
         color: '#fff',
-    },
-    memberSessions: {
-        fontSize: 14,
-        color: '#888',
-        marginTop: 4,
     },
     memberActions: {
         flexDirection: 'row',
@@ -334,6 +377,18 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     saveText: {
+        color: '#fff',
+        fontSize: 16,
+        fontWeight: '600',
+    },
+    deleteContactBtn: {
+        marginTop: 12,
+        padding: 14,
+        alignItems: 'center',
+        backgroundColor: '#dc2626',
+        borderRadius: 8,
+    },
+    deleteContactText: {
         color: '#fff',
         fontSize: 16,
         fontWeight: '600',

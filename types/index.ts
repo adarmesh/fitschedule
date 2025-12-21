@@ -4,9 +4,6 @@ export interface Member {
     id: string;
     name: string;
     whatsapp: string;
-    sessionsTotal: number;
-    sessionsRemaining: number;
-    avatarUri?: string;
     createdAt: string;
 }
 
