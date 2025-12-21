@@ -4,10 +4,11 @@ import EventModal from '@/components/calendar/EventModal';
 import { useApp } from '@/context/AppContext';
 import { Event } from '@/types';
 import { Ionicons } from '@expo/vector-icons';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   Dimensions,
-  PanResponder,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
   ScrollView,
   StyleSheet,
   Text,
@@ -20,34 +21,75 @@ const HOUR_HEIGHT = 60;
 const TIME_COLUMN_WIDTH = 50;
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
+interface Period {
+  id: string;
+  startDate: Date;
+  days: Date[];
+}
+
 export default function CalendarScreen() {
   const { data, processCompletedEvents } = useApp();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedTime, setSelectedTime] = useState<{ date: string; time: string } | null>(null);
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
-  const scrollRef = useRef<ScrollView>(null);
+  const [periods, setPeriods] = useState<Period[]>([]);
+  const [currentPageIndex, setCurrentPageIndex] = useState(1); // Start at middle page
+  
+  const horizontalScrollRef = useRef<ScrollView>(null);
+  const verticalScrollRefs = useRef<(ScrollView | null)[]>([]);
+  const verticalScrollY = useRef(0);
+  const isScrollingHorizontally = useRef(false);
+  const isSyncingScroll = useRef(false);
+  const shouldResetScroll = useRef(false);
+  const previousDateRef = useRef(currentDate);
+  const isSwipingRef = useRef(false);
 
-  // Swipe gesture handler
-  const panResponder = useRef(
-    PanResponder.create({
-      onMoveShouldSetPanResponder: (_, gestureState) => {
-        return Math.abs(gestureState.dx) > 20 && Math.abs(gestureState.dy) < 50;
-      },
-      onPanResponderRelease: (_, gestureState) => {
-        if (gestureState.dx > 50) {
-          // Swipe right - go to previous day(s)
-          navigateDays(-1);
-        } else if (gestureState.dx < -50) {
-          // Swipe left - go to next day(s)
-          navigateDays(1);
-        }
-      },
-    })
-  ).current;
+  const viewType = data.settings.calendarViewType;
+  const prevViewTypeRef = useRef(viewType);
+
+  // Generate 3 periods (previous, current, next)
+  const generatePeriods = useCallback((centerDate: Date): Period[] => {
+    const daysToMove = viewType === 'day' ? 1 : viewType === '3day' ? 3 : 7;
+    
+    const previousDate = new Date(centerDate);
+    previousDate.setDate(centerDate.getDate() - daysToMove);
+    
+    const nextDate = new Date(centerDate);
+    nextDate.setDate(centerDate.getDate() + daysToMove);
+    
+    // Use date-based IDs so React can properly track and reuse components
+    return [
+      { id: previousDate.toISOString(), startDate: previousDate, days: getDaysToShow(previousDate, viewType) },
+      { id: centerDate.toISOString(), startDate: centerDate, days: getDaysToShow(centerDate, viewType) },
+      { id: nextDate.toISOString(), startDate: nextDate, days: getDaysToShow(nextDate, viewType) },
+    ];
+  }, [viewType]);
+
+  // Initialize periods on mount
+  useLayoutEffect(() => {
+    const initialPeriods = generatePeriods(currentDate);
+    setPeriods(initialPeriods);
+    previousDateRef.current = currentDate;
+    shouldResetScroll.current = true;
+  }, []); // Only run on mount
+
+  // Handle view type changes  
+  useEffect(() => {
+    if (periods.length > 0 && prevViewTypeRef.current !== viewType) {  // Only when view type actually changes
+      prevViewTypeRef.current = viewType;
+      isSwipingRef.current = true; // Prevent date change effect from interfering
+      shouldResetScroll.current = true;
+      previousDateRef.current = currentDate;
+      setPeriods(generatePeriods(currentDate));
+      setCurrentPageIndex(1);
+      setTimeout(() => {
+        isSwipingRef.current = false;
+      }, 100);
+    }
+  }, [viewType, currentDate, generatePeriods, periods.length]); // Include all dependencies
 
   function navigateDays(direction: number) {
-    const viewType = data.settings.calendarViewType;
     const daysToMove = viewType === 'day' ? 1 : viewType === '3day' ? 3 : 7;
     setCurrentDate((prev) => {
       const newDate = new Date(prev);
@@ -55,6 +97,22 @@ export default function CalendarScreen() {
       return newDate;
     });
   }
+
+  // Handle date changes from TopBar navigation or date picker
+  useEffect(() => {
+    // Skip if we're in the middle of a swipe or if this is the initial mount
+    if (isSwipingRef.current || periods.length === 0) {
+      return;
+    }
+    
+    // Check if the date actually changed
+    const prevDate = previousDateRef.current;
+    if (prevDate.toDateString() !== currentDate.toDateString()) {
+      previousDateRef.current = currentDate;
+      shouldResetScroll.current = true;
+      setPeriods(generatePeriods(currentDate));
+    }
+  }, [currentDate, generatePeriods]);
 
   // Process completed events on app open
   useEffect(() => {
@@ -68,13 +126,12 @@ export default function CalendarScreen() {
     const now = new Date();
     const scrollToY = now.getHours() * HOUR_HEIGHT - 100;
     setTimeout(() => {
-      scrollRef.current?.scrollTo({ y: Math.max(0, scrollToY), animated: false });
-    }, 100);
+      verticalScrollRefs.current.forEach(ref => {
+        ref?.scrollTo({ y: Math.max(0, scrollToY), animated: false });
+      });
+      verticalScrollY.current = Math.max(0, scrollToY);
+    }, 150);
   }, []);
-
-  const viewType = data.settings.calendarViewType;
-  const days = getDaysToShow(currentDate, viewType);
-  const currentTimePosition = getCurrentTimePosition();
 
   function getDaysToShow(date: Date, view: 'day' | '3day' | 'week'): Date[] {
     const result: Date[] = [];
@@ -103,7 +160,202 @@ export default function CalendarScreen() {
     return data.events.filter((e) => e.date === dateStr);
   }
 
-  const dayWidth = (SCREEN_WIDTH - TIME_COLUMN_WIDTH) / days.length;
+  // Handle horizontal scroll end - implement infinite scrolling
+  const handleHorizontalScrollEnd = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const offsetX = event.nativeEvent.contentOffset.x;
+    const pageIndex = Math.round(offsetX / SCREEN_WIDTH);
+    
+    if (pageIndex !== currentPageIndex && periods.length > 0) {
+      // Mark that we're handling a swipe to prevent the useEffect from interfering
+      isSwipingRef.current = true;
+      
+      // Update periods based on which page we're on
+      if (pageIndex === 0) {
+        // Scrolled to previous period
+        const newDate = periods[0].startDate;
+        previousDateRef.current = newDate;
+        shouldResetScroll.current = true;
+        setPeriods(generatePeriods(newDate));
+        setCurrentDate(newDate);
+        setCurrentPageIndex(1);
+      } else if (pageIndex === 2) {
+        // Scrolled to next period
+        const newDate = periods[2].startDate;
+        previousDateRef.current = newDate;
+        shouldResetScroll.current = true;
+        setPeriods(generatePeriods(newDate));
+        setCurrentDate(newDate);
+        setCurrentPageIndex(1);
+      } else {
+        setCurrentPageIndex(pageIndex);
+      }
+      
+      // Reset the swipe flag after a brief delay
+      setTimeout(() => {
+        isSwipingRef.current = false;
+      }, 100);
+    }
+  };
+
+  // Unified scroll reset logic - runs synchronously after periods update
+  useLayoutEffect(() => {
+    if (shouldResetScroll.current && periods.length === 3) {
+      shouldResetScroll.current = false;
+      horizontalScrollRef.current?.scrollTo({ x: SCREEN_WIDTH, animated: false });
+    }
+  }, [periods]);
+
+  // Track vertical scroll position
+  const handleVerticalScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    if (isScrollingHorizontally.current || isSyncingScroll.current) return;
+    const offsetY = event.nativeEvent.contentOffset.y;
+    verticalScrollY.current = offsetY;
+  };
+
+  // Sync scroll positions when momentum scrolling ends
+  const handleVerticalScrollEnd = () => {
+    if (isScrollingHorizontally.current) return;
+    
+    isSyncingScroll.current = true;
+    const targetY = verticalScrollY.current;
+    
+    // Use requestAnimationFrame for smoother sync
+    requestAnimationFrame(() => {
+      // Sync all vertical scrollviews to the same position
+      verticalScrollRefs.current.forEach((ref) => {
+        if (ref) {
+          ref.scrollTo({ y: targetY, animated: false });
+        }
+      });
+      
+      // Reset sync flag after a brief moment
+      setTimeout(() => {
+        isSyncingScroll.current = false;
+      }, 50);
+    });
+  };
+
+  const currentTimePosition = getCurrentTimePosition();
+
+  const renderPeriod = (period: Period, periodIndex: number) => {
+    const days = period.days;
+    const dayWidth = (SCREEN_WIDTH - TIME_COLUMN_WIDTH) / days.length;
+
+    return (
+      <View key={period.id} style={styles.periodContainer}>
+        {/* Day headers for this period */}
+        <View style={styles.dayHeaders}>
+          {days.map((day, i) => {
+            const isToday = day.toDateString() === new Date().toDateString();
+            const headerWidth = SCREEN_WIDTH / days.length;
+            return (
+              <View key={i} style={[styles.dayHeader, { width: headerWidth }]}>
+                <Text style={[styles.dayName, isToday && styles.todayText]}>
+                  {day.toLocaleDateString('en', { weekday: 'short' })}
+                </Text>
+                <Text style={[styles.dayNumber, isToday && styles.todayNumber]}>
+                  {day.getDate()}
+                </Text>
+              </View>
+            );
+          })}
+        </View>
+
+        {/* Vertical scrollview with grid for this period */}
+        <ScrollView
+          ref={(ref) => (verticalScrollRefs.current[periodIndex] = ref)}
+          style={styles.scrollView}
+          scrollEventThrottle={16}
+          onScroll={handleVerticalScroll}
+          onMomentumScrollEnd={handleVerticalScrollEnd}
+          showsVerticalScrollIndicator={true}
+          bounces={true}
+          alwaysBounceVertical={true}
+          decelerationRate="normal"
+        >
+          <View style={styles.grid}>
+            {/* Time column */}
+            <View style={styles.timeColumn}>
+              {Array.from({ length: 24 }).map((_, hour) => (
+                <View key={hour} style={styles.timeSlot}>
+                  <Text style={styles.timeText}>
+                    {hour.toString().padStart(2, '0')}:00
+                  </Text>
+                </View>
+              ))}
+            </View>
+
+            {/* Day columns */}
+            {days.map((day, dayIndex) => {
+              const dayEvents = getEventsForDay(day);
+              const isToday = day.toDateString() === new Date().toDateString();
+
+              return (
+                <View key={dayIndex} style={[styles.dayColumn, { width: dayWidth }]}>
+                  {Array.from({ length: 48 }).map((_, slotIndex) => (
+                    <View key={slotIndex} style={styles.slot} />
+                  ))}
+
+                  {/* Render events */}
+                  {dayEvents.map((event) => {
+                    const [hours, mins] = event.time.split(':').map(Number);
+                    const top = hours * HOUR_HEIGHT + (mins / 60) * HOUR_HEIGHT;
+                    const height = (event.duration / 60) * HOUR_HEIGHT;
+                    const isSkipped = event.status === 'skipped';
+
+                    const member = data.members.find((m) => m.id === event.memberId);
+                    const group = data.groups.find((g) => g.id === event.groupId);
+                    const eventName = event.type === 'person' ? member?.name : group?.name;
+
+                    return (
+                      <TouchableOpacity
+                        key={event.id}
+                        style={[
+                          styles.event,
+                          { top, height: Math.max(height, 30) },
+                          isSkipped && styles.skippedEvent,
+                          event.type === 'group' && styles.groupEvent,
+                        ]}
+                        onPress={() => setSelectedEvent(event)}
+                      >
+                        <View style={styles.eventContent}>
+                          <Ionicons
+                            name={event.type === 'person' ? 'person' : 'people'}
+                            size={12}
+                            color={isSkipped ? '#888' : '#fff'}
+                            style={styles.eventIcon}
+                          />
+                          <Text
+                            style={[styles.eventText, isSkipped && styles.skippedText]}
+                            numberOfLines={1}
+                          >
+                            {eventName || 'Unnamed'}
+                          </Text>
+                        </View>
+                        {height >= 40 && (
+                          <Text style={[styles.eventTime, isSkipped && styles.skippedText]}>
+                            {event.time}
+                          </Text>
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })}
+
+                  {/* Current time line */}
+                  {isToday && (
+                    <View style={[styles.currentTimeLine, { top: currentTimePosition }]}>
+                      <View style={styles.currentTimeDot} />
+                      <View style={styles.currentTimeBar} />
+                    </View>
+                  )}
+                </View>
+              );
+            })}
+          </View>
+        </ScrollView>
+      </View>
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -119,115 +371,31 @@ export default function CalendarScreen() {
         onDateChange={setCurrentDate}
       />
 
-      {/* Day headers - centered across full screen width */}
-      <View style={styles.dayHeaders}>
-        {days.map((day, i) => {
-          const isToday = day.toDateString() === new Date().toDateString();
-          const headerWidth = SCREEN_WIDTH / days.length;
-          return (
-            <View key={i} style={[styles.dayHeader, { width: headerWidth }]}>
-              <Text style={[styles.dayName, isToday && styles.todayText]}>
-                {day.toLocaleDateString('en', { weekday: 'short' })}
-              </Text>
-              <Text style={[styles.dayNumber, isToday && styles.todayNumber]}>
-                {day.getDate()}
-              </Text>
-            </View>
-          );
-        })}
-      </View>
-
+      {/* Horizontal scrollview with pagination */}
       <ScrollView
-        ref={scrollRef}
-        style={styles.scrollView}
-        {...panResponder.panHandlers}
+        ref={horizontalScrollRef}
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        scrollEventThrottle={16}
+        decelerationRate="normal"
+        bounces={false}
+        onMomentumScrollEnd={(event) => {
+          handleHorizontalScrollEnd(event);
+          // Reset the horizontal scrolling flag after momentum ends
+          setTimeout(() => {
+            isScrollingHorizontally.current = false;
+          }, 100);
+        }}
+        onScrollBeginDrag={() => {
+          isScrollingHorizontally.current = true;
+        }}
+        onMomentumScrollBegin={() => {
+          isScrollingHorizontally.current = true;
+        }}
+        style={styles.horizontalScrollView}
       >
-        <View style={styles.grid}>
-          {/* Time column */}
-          <View style={styles.timeColumn}>
-            {Array.from({ length: 24 }).map((_, hour) => (
-              <View key={hour} style={styles.timeSlot}>
-                <Text style={styles.timeText}>
-                  {hour.toString().padStart(2, '0')}:00
-                </Text>
-              </View>
-            ))}
-          </View>
-
-          {/* Day columns */}
-          {days.map((day, dayIndex) => {
-            const dayEvents = getEventsForDay(day);
-            const isToday = day.toDateString() === new Date().toDateString();
-
-            return (
-              <View key={dayIndex} style={[styles.dayColumn, { width: dayWidth }]}>
-                {Array.from({ length: 48 }).map((_, slotIndex) => {
-                  const hour = Math.floor(slotIndex / 2);
-                  const minute = (slotIndex % 2) * 30;
-                  return (
-                    <View
-                      key={slotIndex}
-                      style={styles.slot}
-                    />
-                  );
-                })}
-
-                {/* Render events */}
-                {dayEvents.map((event) => {
-                  const [hours, mins] = event.time.split(':').map(Number);
-                  const top = hours * HOUR_HEIGHT + (mins / 60) * HOUR_HEIGHT;
-                  const height = (event.duration / 60) * HOUR_HEIGHT;
-                  const isSkipped = event.status === 'skipped';
-
-                  const member = data.members.find((m) => m.id === event.memberId);
-                  const group = data.groups.find((g) => g.id === event.groupId);
-                  const eventName = event.type === 'person' ? member?.name : group?.name;
-
-                  return (
-                    <TouchableOpacity
-                      key={event.id}
-                      style={[
-                        styles.event,
-                        { top, height: Math.max(height, 30) },
-                        isSkipped && styles.skippedEvent,
-                        event.type === 'group' && styles.groupEvent,
-                      ]}
-                      onPress={() => setSelectedEvent(event)}
-                    >
-                      <View style={styles.eventContent}>
-                        <Ionicons
-                          name={event.type === 'person' ? 'person' : 'people'}
-                          size={12}
-                          color={isSkipped ? '#888' : '#fff'}
-                          style={styles.eventIcon}
-                        />
-                        <Text
-                          style={[styles.eventText, isSkipped && styles.skippedText]}
-                          numberOfLines={1}
-                        >
-                          {eventName || 'Unnamed'}
-                        </Text>
-                      </View>
-                      {height >= 40 && (
-                        <Text style={[styles.eventTime, isSkipped && styles.skippedText]}>
-                          {event.time}
-                        </Text>
-                      )}
-                    </TouchableOpacity>
-                  );
-                })}
-
-                {/* Current time line */}
-                {isToday && (
-                  <View style={[styles.currentTimeLine, { top: currentTimePosition }]}>
-                    <View style={styles.currentTimeDot} />
-                    <View style={styles.currentTimeBar} />
-                  </View>
-                )}
-              </View>
-            );
-          })}
-        </View>
+        {periods.map((period, index) => renderPeriod(period, index))}
       </ScrollView>
 
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
@@ -251,6 +419,13 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#0a0a0a',
+  },
+  horizontalScrollView: {
+    flex: 1,
+  },
+  periodContainer: {
+    width: SCREEN_WIDTH,
+    flex: 1,
   },
   dayHeaders: {
     flexDirection: 'row',
