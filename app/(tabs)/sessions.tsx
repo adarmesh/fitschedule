@@ -63,6 +63,14 @@ export default function SessionsScreen() {
         <SafeAreaView style={styles.container} edges={['top']}>
             <View style={styles.header}>
                 <Text style={styles.title}>Sessions Left</Text>
+                <TouchableOpacity
+                    style={styles.addButton}
+                    onPress={() => {
+                        // TODO: Add functionality
+                    }}
+                >
+                    <Ionicons name="add" size={24} color="#fff" />
+                </TouchableOpacity>
             </View>
 
             <FlatList
@@ -84,6 +92,9 @@ const styles = StyleSheet.create({
         backgroundColor: '#0a0a0a',
     },
     header: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
         paddingHorizontal: 20,
         paddingVertical: 16,
         borderBottomWidth: 1,
@@ -93,6 +104,12 @@ const styles = StyleSheet.create({
         fontSize: 24,
         fontWeight: '700',
         color: '#fff',
+    },
+    addButton: {
+        width: 40,
+        height: 40,
+        justifyContent: 'center',
+        alignItems: 'center',
     },
     list: {
         padding: 20,
