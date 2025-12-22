@@ -48,14 +48,24 @@ export default function SessionsScreen() {
                 </View>
             </View>
 
-            {item.whatsapp && (
+            <View style={styles.memberActions}>
+                {item.whatsapp && (
+                    <TouchableOpacity
+                        style={styles.whatsappBtn}
+                        onPress={() => openWhatsApp(item.whatsapp)}
+                    >
+                        <Ionicons name="logo-whatsapp" size={22} color="#25D366" />
+                    </TouchableOpacity>
+                )}
                 <TouchableOpacity
-                    style={styles.whatsappBtn}
-                    onPress={() => openWhatsApp(item.whatsapp)}
+                    style={styles.actionBtn}
+                    onPress={() => {
+                        // TODO: Add edit functionality
+                    }}
                 >
-                    <Ionicons name="logo-whatsapp" size={22} color="#25D366" />
+                    <Ionicons name="create-outline" size={20} color="#4f46e5" />
                 </TouchableOpacity>
-            )}
+            </View>
         </View>
     );
 
@@ -150,11 +160,23 @@ const styles = StyleSheet.create({
     negative: {
         color: '#ef4444',
     },
+    memberActions: {
+        flexDirection: 'row',
+        gap: 8,
+    },
     whatsappBtn: {
         width: 44,
         height: 44,
         backgroundColor: '#1a1a1a',
         borderRadius: 22,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    actionBtn: {
+        width: 40,
+        height: 40,
+        backgroundColor: '#1a1a1a',
+        borderRadius: 20,
         justifyContent: 'center',
         alignItems: 'center',
     },
