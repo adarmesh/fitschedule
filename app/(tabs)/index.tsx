@@ -307,14 +307,16 @@ export default function CalendarScreen() {
                     const group = data.groups.find((g) => g.id === event.groupId);
                     const eventName = event.type === 'person' ? member?.name : group?.name;
 
+                    // Compute the background color based on event type and group color
+                    const eventBgColor = event.type === 'group' && group?.color ? group.color : (event.type === 'group' ? '#22c55e' : '#4f46e5');
+
                     return (
                       <TouchableOpacity
                         key={event.id}
                         style={[
                           styles.event,
-                          { top, height: Math.max(height, 30) },
+                          { top, height: Math.max(height, 30), backgroundColor: eventBgColor },
                           isSkipped && styles.skippedEvent,
-                          event.type === 'group' && styles.groupEvent,
                         ]}
                         onPress={() => setSelectedEvent(event)}
                       >
@@ -493,13 +495,9 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 2,
     right: 2,
-    backgroundColor: '#4f46e5',
     borderRadius: 6,
     padding: 6,
     overflow: 'hidden',
-  },
-  groupEvent: {
-    backgroundColor: '#22c55e',
   },
   skippedEvent: {
     backgroundColor: '#333',

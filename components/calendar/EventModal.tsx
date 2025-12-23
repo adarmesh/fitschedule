@@ -29,7 +29,7 @@ const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const COLORS = ['#4f46e5', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'];
 
 export default function EventModal({ date, time, event, onClose }: EventModalProps) {
-    const { data, addEvent, updateEvent, deleteEvent, createSeries, createGroupEvent, createGroupSeries } = useApp();
+    const { data, addEvent, updateEvent, deleteEvent, createSeries, createGroupEvent, createGroupSeries, updateGroup } = useApp();
 
     // Get group data if editing a group event
     const existingGroup = event?.groupId ? data.groups.find(g => g.id === event.groupId) : null;
@@ -106,11 +106,20 @@ export default function EventModal({ date, time, event, onClose }: EventModalPro
 
         // If editing an existing event, update it
         if (isEditing && event) {
+            // Update the event
             updateEvent(event.id, {
                 time: eventTime,
                 duration: durationNum,
                 notes,
             });
+            
+            // If it's a group event, also update the group's color
+            if (event.type === 'group' && event.groupId) {
+                updateGroup(event.groupId, {
+                    color: groupColor,
+                });
+            }
+            
             onClose();
             return;
         }
