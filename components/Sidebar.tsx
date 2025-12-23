@@ -1,7 +1,8 @@
 import { useApp } from '@/context/AppContext';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useRef } from 'react';
-import { Animated, Linking, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Animated, Image, Linking, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface SidebarProps {
     isOpen: boolean;
@@ -16,6 +17,7 @@ const ANIMATION_DURATION = 300;
 export default function Sidebar({ isOpen, onClose }: SidebarProps) {
     const { data, updateSettings } = useApp();
     const { calendarViewType } = data.settings;
+    const insets = useSafeAreaInsets();
 
     const slideAnim = useRef(new Animated.Value(-SIDEBAR_WIDTH)).current;
     const overlayAnim = useRef(new Animated.Value(0)).current;
@@ -83,13 +85,31 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                 <Animated.View style={[styles.overlay, { opacity: overlayAnim }]}>
                     <TouchableOpacity style={StyleSheet.absoluteFill} onPress={handleClose} activeOpacity={1} />
                 </Animated.View>
-                <Animated.View style={[styles.sidebar, { transform: [{ translateX: slideAnim }] }]}>
+                <Animated.View style={[styles.sidebar, { transform: [{ translateX: slideAnim }], paddingTop: insets.top + 12 }]}>
                     <View style={styles.header}>
                         <Text style={styles.headerTitle}>Settings</Text>
                         <TouchableOpacity onPress={handleClose}>
                             <Ionicons name="close" size={24} color="#fff" />
                         </TouchableOpacity>
                     </View>
+
+                    {data.profile.onboardingComplete && (
+                        <View style={styles.section}>
+                            <View style={styles.profileContainer}>
+                                {data.profile.avatarUri ? (
+                                    <Image
+                                        source={{ uri: data.profile.avatarUri }}
+                                        style={styles.avatar}
+                                    />
+                                ) : (
+                                    <View style={styles.avatarPlaceholder}>
+                                        <Ionicons name="person" size={32} color="#666" />
+                                    </View>
+                                )}
+                                <Text style={styles.profileName}>{data.profile.name}</Text>
+                            </View>
+                        </View>
+                    )}
 
                     <View style={styles.section}>
                         <Text style={styles.sectionTitle}>Calendar View</Text>
@@ -149,14 +169,13 @@ const styles = StyleSheet.create({
         bottom: 0,
         width: 280,
         backgroundColor: '#111',
-        paddingTop: 60,
     },
     header: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
         paddingHorizontal: 20,
-        paddingBottom: 20,
+        paddingVertical: 12,
         borderBottomWidth: 1,
         borderBottomColor: '#222',
     },
@@ -197,6 +216,37 @@ const styles = StyleSheet.create({
     optionTextActive: {
         color: '#fff',
         fontWeight: '500',
+    },
+    profileContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 20,
+        paddingVertical: 16,
+        gap: 16,
+    },
+    avatar: {
+        width: 64,
+        height: 64,
+        borderRadius: 32,
+        backgroundColor: '#1a1a1a',
+        borderWidth: 2,
+        borderColor: '#4f46e5',
+    },
+    avatarPlaceholder: {
+        width: 64,
+        height: 64,
+        borderRadius: 32,
+        backgroundColor: '#1a1a1a',
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 2,
+        borderColor: '#333',
+    },
+    profileName: {
+        flex: 1,
+        fontSize: 18,
+        fontWeight: '600',
+        color: '#fff',
     },
     footer: {
         position: 'absolute',
