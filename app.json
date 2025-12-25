@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "expo-project",
-    "slug": "expo-project",
+    "name": "FitSchedule",
+    "slug": "fitschedule",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon-1766657798756.png",
